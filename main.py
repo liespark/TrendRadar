@@ -19,6 +19,17 @@ import pytz
 import requests
 import yaml
 
+# 从.env文件加载环境变量
+if os.path.exists('.env'):
+    print("正在从.env文件加载环境变量...")
+    with open('.env', 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#'):
+                key, value = line.split('=', 1)
+                os.environ[key] = value.strip()
+    print(".env文件加载完成")
+
 
 VERSION = "2.4.3"
 
@@ -458,11 +469,15 @@ class DataFetcher:
                 data_json = json.loads(data_text)
 
                 status = data_json.get("status", "未知")
-                if status not in ["success", "cache"]:
-                    raise ValueError(f"响应状态异常: {status}")
+                # 只接受成功且为最新数据的响应，不使用缓存数据
+                if status != "success":
+                    if status == "cache":
+                        print(f"警告: 获取到 {id_value} 的缓存数据，忽略并尝试重试")
+                        raise ValueError(f"获取到缓存数据，需要最新数据")
+                    else:
+                        raise ValueError(f"响应状态异常: {status}")
 
-                status_info = "最新数据" if status == "success" else "缓存数据"
-                print(f"获取 {id_value} 成功（{status_info}）")
+                print(f"获取 {id_value} 成功（最新数据）")
                 return data_text, id_value, alias
 
             except Exception as e:
