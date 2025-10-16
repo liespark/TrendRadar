@@ -436,7 +436,7 @@ class DataFetcher:
         min_retry_wait: int = 3,
         max_retry_wait: int = 5,
     ) -> Tuple[Optional[str], str, str]:
-        """获取指定ID数据，支持重试"""
+        """获取指定ID数据，支持重试，失败后接受缓存数据"""
         if isinstance(id_info, tuple):
             id_value, alias = id_info
         else:
@@ -458,6 +458,9 @@ class DataFetcher:
         }
 
         retries = 0
+        cache_response = None
+        last_exception = None
+        
         while retries <= max_retries:
             try:
                 response = requests.get(
@@ -469,18 +472,31 @@ class DataFetcher:
                 data_json = json.loads(data_text)
 
                 status = data_json.get("status", "未知")
-                # 只接受成功且为最新数据的响应，不使用缓存数据
-                if status != "success":
-                    if status == "cache":
-                        print(f"警告: 获取到 {id_value} 的缓存数据，忽略并尝试重试")
-                        raise ValueError(f"获取到缓存数据，需要最新数据")
-                    else:
-                        raise ValueError(f"响应状态异常: {status}")
-
-                print(f"获取 {id_value} 成功（最新数据）")
-                return data_text, id_value, alias
+                
+                # 如果获取到缓存数据，保存它并继续尝试获取最新数据
+                if status == "cache":
+                    print(f"警告: 获取到 {id_value} 的缓存数据，将继续尝试获取最新数据")
+                    cache_response = data_text
+                    retries += 1  # 增加重试计数，继续下一轮循环
+                    
+                    # 等待一段时间后重试
+                    if retries <= max_retries:
+                        base_wait = random.uniform(min_retry_wait, max_retry_wait)
+                        additional_wait = (retries - 1) * random.uniform(1, 2)
+                        wait_time = base_wait + additional_wait
+                        print(f"将在 {wait_time:.2f}秒后重试获取最新数据...")
+                        time.sleep(wait_time)
+                    continue  # 继续下一次循环尝试获取最新数据
+                    
+                # 如果获取到最新数据，直接返回
+                elif status == "success":
+                    print(f"获取 {id_value} 成功（最新数据）")
+                    return data_text, id_value, alias
+                else:
+                    raise ValueError(f"响应状态异常: {status}")
 
             except Exception as e:
+                last_exception = e
                 retries += 1
                 if retries <= max_retries:
                     base_wait = random.uniform(min_retry_wait, max_retry_wait)
@@ -488,10 +504,14 @@ class DataFetcher:
                     wait_time = base_wait + additional_wait
                     print(f"请求 {id_value} 失败: {e}. {wait_time:.2f}秒后重试...")
                     time.sleep(wait_time)
-                else:
-                    print(f"请求 {id_value} 失败: {e}")
-                    return None, id_value, alias
-        return None, id_value, alias
+        
+        # 所有重试都失败后，如果有缓存数据，则使用缓存数据
+        if cache_response:
+            print(f"请求 {id_value} 所有尝试失败，使用缓存数据")
+            return cache_response, id_value, alias
+        else:
+            print(f"请求 {id_value} 失败: {last_exception}")
+            return None, id_value, alias
 
     def crawl_websites(
         self,
