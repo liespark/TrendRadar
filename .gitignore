@@ -2,14 +2,15 @@
 .env
 .env.*.local
 
-# === 运行产物：每日报告 / 推送记录（避免仓库膨胀）===
-output/
-
-# === Python ===
+# === Python / uv ===
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
 *.log
+
+# === 运行时产物（避免仓库膨胀；仅 index.html 由 workflow 提交）===
+output/
 
 # === 编辑器 / 系统 ===
 .vscode/
